@@ -1,10 +1,61 @@
+### 内存模型
+
+![image-20211202161525901](JUC.assets/image-20211202161525901.png)
+
+![image-20211202161620136](JUC.assets/image-20211202161620136.png)
+
+![image-20211202161845014](JUC.assets/image-20211202161845014.png)
+
+### CAS
+
+CAS指令需要有三个操作数，分别是内存位置（在Java中可以简单地理解为变量的内存地址，用V 表示）、旧的预期值（用A表示）和准备设置的新值（用B表示）。CAS指令执行时，当且仅当V符合 A时，处理器才会用B更新V的值，否则它就不执行更新。但是，不管是否更新了V的值，都会返回V的 旧值，上述的处理过程是一个原子操作，执行期间不会被其他线程中断。这种乐观并发策略的实现不再需要把线程阻塞挂起，因此这种同步操作被 称为非阻塞同步（Non-Blocking Synchronization），使用这种措施的代码也常被称为无锁（Lock-Free） 编程。
+
 ### volatile
 
-#### 功能 ####
+#### 缓存一致性协议
 
-1、保证变量线程间的可见性
+https://www.cnblogs.com/ynyhl/p/12119690.html
 
-2、禁止指令重排序
+#### 保证此变量对所有线程的可见性
+
+​		这里的“可见性”是指当一条线程修改了这个变量的值，新值对于其他线程来说是可以立即得知 的。而普通变量并不能做到这一点，普通变量的值在线程间传递时均需要通过主内存来完成。比如， 线程A修改一个普通变量的值，然后向主内存进行回写，另外一条线程B在线程A回写完成了之后再对 主内存进行读取操作，新变量值才会对线程B可见。
+
+#### 禁止指令重排序
+
+```java
+public class VolatileTest {
+
+    private static volatile VolatileTest instance = null;
+    //单例模式中应用volatile，确保指令不会重排序
+    public VolatileTest getInstance() {
+        if (instance == null) {
+            synchronized(VolatileTest.class) {
+                if (instance == null) {
+                    instance = new VolatileTest();
+                }
+            }
+        }
+        return instance;
+    }
+}
+```
+
+instance = new VolatileTest();
+
+该语句非原子操作，实际是三个步骤。
+
+1.给singleton分配内存；
+2.调用 Singleton 的构造函数来初始化成员变量；
+3.将给singleton对象指向分配的内存空间（此时singleton才不为null）；
+虚拟机的指令重排序–>
+
+执行命令时虚拟机可能会对以上3个步骤交换位置 最后可能是132这种 分配内存并修改指针后未初始化 多线程获取时可能会出现问题。
+
+当线程A进入同步方法执行singleton = new Singleton();代码时，恰好这三个步骤重排序后为1 3 2，
+
+第一个线程初始化对象到一半，第二个线程来发现已经不是null了就直接返回了 实际上该对象此时还没有完全初始化 可能会出现这个问题。
+
+那么步骤3执行后singleton已经不为null,但是未执行步骤2，singleton对象初始化不完全，此时线程B执行getInstance()方法，第一步判断时singleton不为null,则直接将未完全初始化的singleton对象返回了。
 
 #### 实现原理
 
@@ -34,7 +85,67 @@
 
 > lock指令
 
+#### volatile无法保证原子性？
+
+```
+/**
+ * volatile变量自增运算测试
+ *
+ * @author zzm
+ */
+public class VolatileTest {
+    public static volatile int race = 0;
+
+    public static void increase() {
+        race++;
+    }
+
+    private static final int THREADS_COUNT = 20;
+
+    public static void main(String[] args) {
+        Thread[] threads = new Thread[THREADS_COUNT];
+        for (int i = 0; i < THREADS_COUNT; i++) {
+            threads[i] = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    for (int i = 0; i < 10000; i++) {
+                        increase();
+                    }
+                }
+            });
+            threads[i].start();
+        }
+        // 等待所有累加线程都结束
+        while (Thread.activeCount() > 1)
+            Thread.yield();
+        System.out.println(race);
+    }
+}
+```
+
+这段代码发起了20个线程，每个线程对race变量进行10000次自增操作，如果这段代码能够正确并 发的话，最后输出的结果应该是200000。读者运行完这段代码之后，并不会获得期望的结果，而且会 发现每次运行程序，输出的结果都不一样，都是一个小于200000的数字。这是为什么呢？ 问题就出在自增运算“race++”之中，我们用Javap反编译这段代码后会得到代码清单12-2所示，发 现只有一行代码的increase()方法在Class文件中是由4条字节码指令构成（return指令不是由race++产生 的，这条指令可以不计算），从字节码层面上已经很容易分析出并发失败的原因了：当getstatic指令把 race的值取到操作栈顶时，volatile关键字保证了race的值在此时是正确的，**但是在执行iconst_1、iadd这 些指令的时候，其他线程可能已经把race的值改变了，而操作栈顶的值就变成了过期的数据，所以 putstatic指令执行后就可能把较小的race值同步回主内存之中。**
+
+```
+public static void increase();
+    Code:
+        Stack=2, Locals=0, Args_size=0
+        0: getstatic #13; //Field race:I
+        3: iconst_1
+        4: iadd
+        5: putstatic #13; //Field race:I
+        8: return
+    LineNumberTable:
+        line 14: 0
+        line 15: 8
+```
+
+VolatileTest的字节码
+
+
+
 ### synchronized
+
+synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3 个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32 位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。
 
 
 
