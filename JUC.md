@@ -8,7 +8,10 @@
 
 ### CAS
 
+```
 CAS指令需要有三个操作数，分别是内存位置（在Java中可以简单地理解为变量的内存地址，用V 表示）、旧的预期值（用A表示）和准备设置的新值（用B表示）。CAS指令执行时，当且仅当V符合 A时，处理器才会用B更新V的值，否则它就不执行更新。但是，不管是否更新了V的值，都会返回V的 旧值，上述的处理过程是一个原子操作，执行期间不会被其他线程中断。这种乐观并发策略的实现不再需要把线程阻塞挂起，因此这种同步操作被 称为非阻塞同步（Non-Blocking Synchronization），使用这种措施的代码也常被称为无锁（Lock-Free） 编程。
+```
+
 
 ### volatile
 
@@ -18,9 +21,14 @@ https://www.cnblogs.com/ynyhl/p/12119690.html
 
 #### 保证此变量对所有线程的可见性
 
-​		这里的“可见性”是指当一条线程修改了这个变量的值，新值对于其他线程来说是可以立即得知 的。而普通变量并不能做到这一点，普通变量的值在线程间传递时均需要通过主内存来完成。比如， 线程A修改一个普通变量的值，然后向主内存进行回写，另外一条线程B在线程A回写完成了之后再对 主内存进行读取操作，新变量值才会对线程B可见。
+```
+这里的“可见性”是指当一条线程修改了这个变量的值，新值对于其他线程来说是可以立即得知 的。而普通变量并不能做到这一点，普通变量的值在线程间传递时均需要通过主内存来完成。比如， 线程A修改一个普通变量的值，然后向主内存进行回写，另外一条线程B在线程A回写完成了之后再对 主内存进行读取操作，新变量值才会对线程B可见。
+```
+
 
 #### 禁止指令重排序
+
+> https://blog.csdn.net/qq646040754/article/details/81327933
 
 ```java
 public class VolatileTest {
@@ -87,6 +95,8 @@ instance = new VolatileTest();
 
 #### volatile无法保证原子性？
 
+> 深入Java虚拟机
+
 ```
 /**
  * volatile变量自增运算测试
@@ -123,7 +133,11 @@ public class VolatileTest {
 }
 ```
 
-这段代码发起了20个线程，每个线程对race变量进行10000次自增操作，如果这段代码能够正确并 发的话，最后输出的结果应该是200000。读者运行完这段代码之后，并不会获得期望的结果，而且会 发现每次运行程序，输出的结果都不一样，都是一个小于200000的数字。这是为什么呢？ 问题就出在自增运算“race++”之中，我们用Javap反编译这段代码后会得到代码清单12-2所示，发 现只有一行代码的increase()方法在Class文件中是由4条字节码指令构成（return指令不是由race++产生 的，这条指令可以不计算），从字节码层面上已经很容易分析出并发失败的原因了：当getstatic指令把 race的值取到操作栈顶时，volatile关键字保证了race的值在此时是正确的，**但是在执行iconst_1、iadd这 些指令的时候，其他线程可能已经把race的值改变了，而操作栈顶的值就变成了过期的数据，所以 putstatic指令执行后就可能把较小的race值同步回主内存之中。**
+```
+这段代码发起了20个线程，每个线程对race变量进行10000次自增操作，如果这段代码能够正确并 发的话，最后输出的结果应该是200000。读者运行完这段代码之后，并不会获得期望的结果，而且会 发现每次运行程序，输出的结果都不一样，都是一个小于200000的数字。这是为什么呢？ 问题就出在自增运算“race++”之中，我们用Javap反编译这段代码后会得到代码清单12-2所示，发 现只有一行代码的increase()方法在Class文件中是由4条字节码指令构成（return指令不是由race++产生 的，这条指令可以不计算），从字节码层面上已经很容易分析出并发失败的原因了：当getstatic指令把 race的值取到操作栈顶时，volatile关键字保证了race的值在此时是正确的，
+```
+
+**但是在执行iconst_1、iadd这 些指令的时候，其他线程可能已经把race的值改变了，而操作栈顶的值就变成了过期的数据，所以 putstatic指令执行后就可能把较小的race值同步回主内存之中。**
 
 ```
 public static void increase();
@@ -141,21 +155,83 @@ public static void increase();
 
 VolatileTest的字节码
 
-
-
 ### synchronized
 
+> Java并发编程艺术
+
+synchronized 实现同步的基础：Java 中的每一个对象都可以作为锁。
+具体表现为以下 3 种形式。
+⚫ 对于普通同步方法，锁是当前实例对象。
+⚫ 对于静态同步方法，锁是当前类的 Class 对象。
+⚫ 对于同步方法块，锁是 Synchonized 括号里配置的对象。
+
+```
+从 JVM 规范中可以看到 Synchonized 在 JVM 里的实现原理，JVM 基于进入和退出Monitor 对象来实现方法同步和代码块同步，但两者的实现细节不一样。代码块同步是使用 monitorenter 和 monitorexit 指令实现的，而方法同步是使用另外一种方式实现的，细节在 JVM 规范里并没有详细说明。但是，方法的同步同样可以使用这两个指令来实现。monitorenter 指令是在编译后插入到同步代码块的开始位置，而 monitorexit 是插入到方法结束处和异常处，JVM 要保证每个 monitorenter 必须有对应的 monitorexit 与之配对。任何对象都有一个 monitor 与之关联，当且一个 monitor 被持有后，它将处于锁定状态。线程执行到 monitorenter 指令时，将会尝试获取对象所对应的 monitor 的所有权，即尝试获得对象的锁。
+```
+
+
+```
+锁机制保证了只有获得锁的线程才能够操作锁定的内存区域。JVM 内部实现了很多种锁机制，有偏向锁、轻量级锁和互斥锁。有意思的是除了偏向锁，JVM 实现锁的方式都用了循环 CAS，即当一个线程想进入同步块的时候使用循环 CAS 的方式来获取锁，当它退出同步块的时候使用循环 CAS 释放锁。
+```
+
+
+#### 对象头
+
+> Java并发编程艺术
+
+```
 synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3 个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32 位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。
+```
 
 
+```
+synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3 个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32 位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32
+位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。
+```
+
+
+![](image/JUC/1638498958095.png)
+
+```
+Java 对象头里的 Mark Word 里默认存储对象的 HashCode、分代年龄和锁标记位。32位 JVM 的 Mark Word 的默认存储结构如表 2-3 所示。
+```
+
+
+![](image/JUC/1638499004476.png)
+
+```
+在运行期间，Mark Word 里存储的数据会随着锁标志位的变化而变化。Mark Word可能变化为存储以下 4 种数据，如表 2-4 所示。
+```
+
+
+![](image/JUC/1638499034580.png)
+
+```
+在 64 位虚拟机下，Mark Word 是 64bit 大小的，其存储结构如表 2-5 所示。
+```
+
+
+![](image/JUC/1638499085506.png)
+
+#### 锁升级
+
+> Java并发编程艺术
+
+锁一共有 4 种状态，级别从低到高依次是：无锁状态、偏向锁状态、轻量级锁状态和重量级锁状态，这几个状态会随着竞争情况逐渐升级。
+
+![](image/JUC/1638499199628.png)
+
+![](image/JUC/1638499223404.png)
 
 #### 实现原理
 
+> https://blog.csdn.net/21aspnet/article/details/88571740
+
 1、字节码
 
-> monitor enter
->
-> monitor exit
+monitor enter
+
+monitor exit
 
 2、jvm
 
@@ -165,6 +241,11 @@ C++的锁实现
 
 lock comxchg
 
+#### 哈希码
+
+```
+当对象进入偏向状态的时候，Mark Word大部分的空间（23个比特）都用于存储持有锁的线程ID了，这部分空间占用了原有存储对象哈希码的位置，那原来对象的哈希码怎么办呢？在Java语言里面一个对象如果计算过哈希码，就应该一直保持该值不变（强烈推荐但不强制，因为用户可以重载hashCode()方法按自己的意愿返回哈希码），否则很多依赖对象哈希码的API都可能存在出错风险。而作为绝大多数对象哈希码来源的Object::hashCode()方法，返回的是对象的一致性哈希码（Identity Hash Code），这个值是能强制保证不变的，它通过在对象头中存储计算结果来保证第一次计算之后，再次调用该方法取到的哈希码值永远不会再发生改变。因此，当一个对象已经计算过一致性哈希码后，它就再也无法进入偏向锁状态了；而当一个对象当前正处于偏向锁状态，又收到需要计算其一致性哈希码请求[1]时，它的偏向状态会被立即撤销，并且锁会膨胀为重量级锁。在重量级锁的实现中，对象头指向了重量级锁的位置，代表重量级锁的ObjectMonitor类里有字段可以记录非加锁状态（标志位为“01”）下的Mark Word，其中自然可以存储原来的哈希码。
+```
 
 
 ### ThreadLocal
@@ -231,7 +312,10 @@ public class ThreadLocalTest {
 
 ![ThreadLocal存取流程](JUC.assets/ThreadLocal存取流程-16384151560131.jpg)
 
+```
 如main和线程演示，主线程中创建ThreadLocal，每个子线程（Thread）都有一个自己的ThreadLocal.ThreadLocalMap变量，map以主线程的ThreadLocal作为key保存一个数据，这样取值的时候都能通过主线程的ThreadLocal这一唯一的key取到自己线程独有的数据，主线程有多个ThreadLocal，就可以存取多个数据
+```
+
 
 #### InheritableThreadLocal
 
@@ -242,7 +326,7 @@ private Thread(ThreadGroup g, Runnable target, String name,
                long stackSize, AccessControlContext acc,
                boolean inheritThreadLocals) {
     ...
-    
+  
     Thread parent = currentThread();
     ....
     if (inheritThreadLocals && parent.inheritableThreadLocals != null)
@@ -296,9 +380,9 @@ private ThreadLocalMap(ThreadLocalMap parentMap) {
 
 InheritableThreadLocal的存取复用ThreadLocal的方法
 
-
-
 #### ThreadLocalMap的key为什么继承弱引用
+
+> https://zhuanlan.zhihu.com/p/139214244
 
 ```java
 static class Entry extends WeakReference<ThreadLocal<?>> {
@@ -322,7 +406,11 @@ static class Entry extends WeakReference<ThreadLocal<?>> {
 
 ![img](JUC.assets/v2-52355ad50ad93d41d7703cad682e9c40_1440w.jpg)
 
-​		虽然两个线程都主动释放掉了对ThreadLocal对象的引用，但是，从主线程thread引用->ThreadLocal对象，依然存在这一条可达路径。众所周知，现今主流JVM判断一个对象是否可回收的算法通常为可达路径算法，而不是引用[计数法](https://www.zhihu.com/search?q=计数法&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra={"sourceType"%3A"article"%2C"sourceId"%3A139214244})。可达路径算法以GCROOT出发，如果存在一条通向某个对象的强引用通路，那么这个对象是永远不会回收掉的(即便发生OOM也不会回收)。thread的引用是主线程的一个[本地变量](https://www.zhihu.com/search?q=本地变量&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra={"sourceType"%3A"article"%2C"sourceId"%3A139214244})，根据GCROOT算法，thread的引用是可以作为一个GCROOT的，那么现状就是：我们显式地释放掉了threadLocal的引用(threadLocal = null;)，因为我们确认后续我们不会使用到它了，但是，由于存在GCROOT的一条可达通路，程序并没有像我们希望的那样立刻释放掉ThreadLocal对象，直到我们所有的线程都释放掉了，即程序结束，ThreadLocal对象才会被真正的释放掉，这无疑就是内存泄露。为了解决这个问题，我们把图中的红线换成弱引用，如下图所示：
+```
+虽然两个线程都主动释放掉了对ThreadLocal对象的引用，但是，从主线程thread引用->ThreadLocal对象，依然存在这一条可达路径。众所周知，现今主流JVM判断一个对象是否可回收的算法通常为可达路径算法，而不是引用
+```
+
+[计数法](https://www.zhihu.com/search?q=计数法&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra={)。可达路径算法以GCROOT出发，如果存在一条通向某个对象的强引用通路，那么这个对象是永远不会回收掉的(即便发生OOM也不会回收)。thread的引用是主线程的一个[本地变量](https://www.zhihu.com/search?q=本地变量&search_source=Entity&hybrid_search_source=Entity&hybrid_search_extra={)，根据GCROOT算法，thread的引用是可以作为一个GCROOT的，那么现状就是：我们显式地释放掉了threadLocal的引用(threadLocal = null;)，因为我们确认后续我们不会使用到它了，但是，由于存在GCROOT的一条可达通路，程序并没有像我们希望的那样立刻释放掉ThreadLocal对象，直到我们所有的线程都释放掉了，即程序结束，ThreadLocal对象才会被真正的释放掉，这无疑就是内存泄露。为了解决这个问题，我们把图中的红线换成弱引用，如下图所示：
 
 ![img](JUC.assets/v2-2081ed02d4874866c018192bdee92249_1440w.jpg)
 
@@ -333,30 +421,4 @@ static class Entry extends WeakReference<ThreadLocal<?>> {
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### 1
-
