@@ -12,7 +12,6 @@
 CAS指令需要有三个操作数，分别是内存位置（在Java中可以简单地理解为变量的内存地址，用V 表示）、旧的预期值（用A表示）和准备设置的新值（用B表示）。CAS指令执行时，当且仅当V符合 A时，处理器才会用B更新V的值，否则它就不执行更新。但是，不管是否更新了V的值，都会返回V的 旧值，上述的处理过程是一个原子操作，执行期间不会被其他线程中断。这种乐观并发策略的实现不再需要把线程阻塞挂起，因此这种同步操作被 称为非阻塞同步（Non-Blocking Synchronization），使用这种措施的代码也常被称为无锁（Lock-Free） 编程。
 ```
 
-
 ### volatile
 
 #### 缓存一致性协议
@@ -24,7 +23,6 @@ https://www.cnblogs.com/ynyhl/p/12119690.html
 ```
 这里的“可见性”是指当一条线程修改了这个变量的值，新值对于其他线程来说是可以立即得知 的。而普通变量并不能做到这一点，普通变量的值在线程间传递时均需要通过主内存来完成。比如， 线程A修改一个普通变量的值，然后向主内存进行回写，另外一条线程B在线程A回写完成了之后再对 主内存进行读取操作，新变量值才会对线程B可见。
 ```
-
 
 #### 禁止指令重排序
 
@@ -169,11 +167,9 @@ synchronized 实现同步的基础：Java 中的每一个对象都可以作为�
 从 JVM 规范中可以看到 Synchonized 在 JVM 里的实现原理，JVM 基于进入和退出Monitor 对象来实现方法同步和代码块同步，但两者的实现细节不一样。代码块同步是使用 monitorenter 和 monitorexit 指令实现的，而方法同步是使用另外一种方式实现的，细节在 JVM 规范里并没有详细说明。但是，方法的同步同样可以使用这两个指令来实现。monitorenter 指令是在编译后插入到同步代码块的开始位置，而 monitorexit 是插入到方法结束处和异常处，JVM 要保证每个 monitorenter 必须有对应的 monitorexit 与之配对。任何对象都有一个 monitor 与之关联，当且一个 monitor 被持有后，它将处于锁定状态。线程执行到 monitorenter 指令时，将会尝试获取对象所对应的 monitor 的所有权，即尝试获得对象的锁。
 ```
 
-
 ```
 锁机制保证了只有获得锁的线程才能够操作锁定的内存区域。JVM 内部实现了很多种锁机制，有偏向锁、轻量级锁和互斥锁。有意思的是除了偏向锁，JVM 实现锁的方式都用了循环 CAS，即当一个线程想进入同步块的时候使用循环 CAS 的方式来获取锁，当它退出同步块的时候使用循环 CAS 释放锁。
 ```
-
 
 #### 对象头
 
@@ -183,12 +179,10 @@ synchronized 实现同步的基础：Java 中的每一个对象都可以作为�
 synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3 个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32 位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。
 ```
 
-
 ```
 synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3 个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32 位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类型，则虚拟机用 3个字宽（Word）存储对象头，如果对象是非数组类型，则用 2 字宽存储对象头。在 32
 位虚拟机中，1 字宽等于 4 字节，即 32bit，如表 2-2 所示。
 ```
-
 
 ![](image/JUC/1638498958095.png)
 
@@ -196,20 +190,17 @@ synchronized 用的锁是存在 Java 对象头里的。如果对象是数组类�
 Java 对象头里的 Mark Word 里默认存储对象的 HashCode、分代年龄和锁标记位。32位 JVM 的 Mark Word 的默认存储结构如表 2-3 所示。
 ```
 
-
 ![](image/JUC/1638499004476.png)
 
 ```
 在运行期间，Mark Word 里存储的数据会随着锁标志位的变化而变化。Mark Word可能变化为存储以下 4 种数据，如表 2-4 所示。
 ```
 
-
 ![](image/JUC/1638499034580.png)
 
 ```
 在 64 位虚拟机下，Mark Word 是 64bit 大小的，其存储结构如表 2-5 所示。
 ```
-
 
 ![](image/JUC/1638499085506.png)
 
@@ -243,10 +234,11 @@ lock comxchg
 
 #### 哈希码
 
+> 深入理解Java虚拟机
+
 ```
 当对象进入偏向状态的时候，Mark Word大部分的空间（23个比特）都用于存储持有锁的线程ID了，这部分空间占用了原有存储对象哈希码的位置，那原来对象的哈希码怎么办呢？在Java语言里面一个对象如果计算过哈希码，就应该一直保持该值不变（强烈推荐但不强制，因为用户可以重载hashCode()方法按自己的意愿返回哈希码），否则很多依赖对象哈希码的API都可能存在出错风险。而作为绝大多数对象哈希码来源的Object::hashCode()方法，返回的是对象的一致性哈希码（Identity Hash Code），这个值是能强制保证不变的，它通过在对象头中存储计算结果来保证第一次计算之后，再次调用该方法取到的哈希码值永远不会再发生改变。因此，当一个对象已经计算过一致性哈希码后，它就再也无法进入偏向锁状态了；而当一个对象当前正处于偏向锁状态，又收到需要计算其一致性哈希码请求[1]时，它的偏向状态会被立即撤销，并且锁会膨胀为重量级锁。在重量级锁的实现中，对象头指向了重量级锁的位置，代表重量级锁的ObjectMonitor类里有字段可以记录非加锁状态（标志位为“01”）下的Mark Word，其中自然可以存储原来的哈希码。
 ```
-
 
 ### ThreadLocal
 
@@ -315,7 +307,6 @@ public class ThreadLocalTest {
 ```
 如main和线程演示，主线程中创建ThreadLocal，每个子线程（Thread）都有一个自己的ThreadLocal.ThreadLocalMap变量，map以主线程的ThreadLocal作为key保存一个数据，这样取值的时候都能通过主线程的ThreadLocal这一唯一的key取到自己线程独有的数据，主线程有多个ThreadLocal，就可以存取多个数据
 ```
-
 
 #### InheritableThreadLocal
 
@@ -414,6 +405,26 @@ static class Entry extends WeakReference<ThreadLocal<?>> {
 
 ![img](JUC.assets/v2-2081ed02d4874866c018192bdee92249_1440w.jpg)
 
+#### AQS
+
+> 多线程第三版
+
+```
+    //The synchronization state. AbstractQueuedSynchronizer，state不为0，代表已经被线程持有锁，state大于1，代表同一线程重复持有锁
+    //使用cas的方式修改state
+    private volatile int state;
+    //The current owner of exclusive mode synchronization.transient代表这个属性不需要序列化（Serilizable）
+    private transient Thread exclusiveOwnerThread;
+  protected final void setExclusiveOwnerThread(Thread thread) {
+        exclusiveOwnerThread = thread;
+    }
+```
+
+```
+ReentrantLock implements Lock
+拥有内部类NonfairSync，Sync
+NonfairSync extends Sync extends AbstractQueuedSynchronizer extends AbstractOwnableSynchronizer implements java.io.Serializable
+```
 
 
 
